@@ -1,0 +1,1048 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Settings, Save, Upload, Zap, Box, Calendar, Plus, Check, Trash2, AlertTriangle, Star, Cpu, RefreshCw, Gamepad2, Archive, Power, Target, Flame, BarChart2, CalendarDays, Smile, Frown, Meh } from 'lucide-react';
+
+// --- SISTEMA DE AUDIO AVANZADO (Sintetizador Retro) ---
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+const playTone = (freq, type, duration, vol = 0.1) => {
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start();
+  osc.stop(audioCtx.currentTime + duration);
+};
+
+const playCheckSound = () => {
+  playTone(523.25, 'square', 0.1, 0.15); 
+  setTimeout(() => playTone(659.25, 'square', 0.1, 0.15), 80); 
+  setTimeout(() => playTone(783.99, 'square', 0.15, 0.15), 160); 
+  setTimeout(() => playTone(1046.50, 'square', 0.3, 0.2), 240); 
+};
+
+const playDeleteSound = () => {
+  playTone(300, 'sawtooth', 0.1, 0.1);
+  setTimeout(() => playTone(200, 'sawtooth', 0.2, 0.1), 100);
+};
+
+const playMoveSound = () => {
+  playTone(400, 'triangle', 0.1, 0.1);
+  setTimeout(() => playTone(800, 'triangle', 0.1, 0.1), 100);
+};
+
+const playWinSound = () => {
+  const notes = [
+    {f: 523.25, d: 0.15}, {f: 523.25, d: 0.15}, {f: 523.25, d: 0.15}, 
+    {f: 659.25, d: 0.3}, {f: 523.25, d: 0.15}, {f: 783.99, d: 0.4}
+  ];
+  let time = 0;
+  notes.forEach((note) => {
+    setTimeout(() => playTone(note.f, 'square', note.d, 0.2), time);
+    time += note.d * 1000 + 50;
+  });
+};
+
+// Utilidad para obtener fecha actual en formato local sin problemas de zona horaria
+const getTodayStr = () => {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+};
+
+// --- FRASES TDAH (Dopamina Sarcástica) ---
+const tdahQuotes = [
+  "¡Bien! Ahora solo faltan las 47 cosas que pensaste hacer mientras hacías esta.",
+  "Dopamina inyectada. Nivel de ansiedad: Ligeramente menor.",
+  "¡Increíble! Lograste no distraerte con una mosca por 5 minutos enteros.",
+  "Tarea completada. Tu cerebro merece 3 horas de TikTok como recompensa.",
+  "¡Magia oscura! Terminaste algo antes de que sea una emergencia nivel 3.",
+  "Felicidades, engañaste a la disfunción ejecutiva. Por ahora...",
+  "Una tarea menos. El hiperfoco se aproxima, prepárate para olvidar comer.",
+  "¡Boom! ¿Quién necesita medicación cuando tienes el pánico de último minuto?",
+  "Completado. ¿Seguro que no lo habías hecho hace dos semanas y apenas lo anotaste?",
+  "Dopamina conseguida. Úsala sabiamente antes de que veas un video de restauración de relojes."
+];
+
+export default function App() {
+  const [tasks, setTasks] = useState([]);
+  const [habits, setHabits] = useState([]); 
+  const [history, setHistory] = useState({});
+  const [view, setView] = useState('hoy'); 
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [dayMood, setDayMood] = useState('meh'); // 'rifado', 'meh', 'llorar'
+  const [toastMessage, setToastMessage] = useState(null);
+  const [systemStatus, setSystemStatus] = useState('standby'); // 'standby', 'booting', 'online'
+  const fileInputRef = useRef(null);
+  
+  const todayStr = getTodayStr();
+
+  const startBootSequence = () => {
+    setSystemStatus('booting');
+    
+    // Reproducir el archivo intro.mp3 local
+    const introAudio = new Audio('intro.mp3');
+    introAudio.volume = 0.8;
+    introAudio.play().catch(e => console.warn("No se pudo reproducir intro.mp3. Revisa la ruta.", e));
+
+    // Duración de la intro antes de mostrar el OS
+    setTimeout(() => {
+      setSystemStatus('online');
+    }, 3500);
+  };
+
+  useEffect(() => {
+    const savedTasks = localStorage.getItem('tostiloko_tasks');
+    const savedHabits = localStorage.getItem('tostiloko_habits');
+    const savedHistory = localStorage.getItem('tostiloko_history');
+    
+    if (savedTasks) try { setTasks(JSON.parse(savedTasks)); } catch(e){}
+    if (savedHabits) try { setHabits(JSON.parse(savedHabits)); } catch(e){}
+    if (savedHistory) try { setHistory(JSON.parse(savedHistory)); } catch(e){}
+  }, []);
+
+  useEffect(() => { localStorage.setItem('tostiloko_tasks', JSON.stringify(tasks)); }, [tasks]);
+  useEffect(() => { localStorage.setItem('tostiloko_habits', JSON.stringify(habits)); }, [habits]);
+  useEffect(() => { localStorage.setItem('tostiloko_history', JSON.stringify(history)); }, [history]);
+
+  // Mostrar mensaje sarcástico temporal
+  const showToast = () => {
+    const randomQuote = tdahQuotes[Math.floor(Math.random() * tdahQuotes.length)];
+    setToastMessage(randomQuote);
+    setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  // --- FILTRADO DE TAREAS Y HÁBITOS PARA "HOY" ---
+  const todayTasks = tasks.filter(t => t.isToday);
+  // Un hábito se muestra en "Hoy" si no ha llegado a 90 días
+  const activeHabitsToday = habits.filter(h => h.logs.length < 90);
+  
+  // Cálculo de Progreso
+  const completedRegularToday = todayTasks.filter(t => t.done).length;
+  const completedHabitsToday = activeHabitsToday.filter(h => h.logs.includes(todayStr)).length;
+  
+  const totalCompletedToday = completedRegularToday + completedHabitsToday;
+  const totalItemsToday = todayTasks.length + activeHabitsToday.length;
+  const progress = totalItemsToday === 0 ? 0 : (totalCompletedToday / totalItemsToday) * 100;
+
+  useEffect(() => {
+    if (totalItemsToday > 0 && totalCompletedToday === totalItemsToday && !showCelebration) {
+      setShowCelebration(true);
+      playWinSound();
+      setTimeout(() => setShowCelebration(false), 6000);
+    }
+  }, [totalCompletedToday, totalItemsToday]);
+
+  // --- MÉTODOS PARA TAREAS REGULARES ---
+  const toggleTask = (id) => {
+    setTasks(tasks.map(t => {
+      if (t.id === id) {
+        if (!t.done) {
+            playCheckSound();
+            showToast();
+        }
+        return { ...t, done: !t.done };
+      }
+      return t;
+    }));
+  };
+
+  const moveTask = (id, toToday) => {
+    playMoveSound();
+    setTasks(tasks.map(t => t.id === id ? { ...t, isToday: toToday } : t));
+  };
+
+  const deleteTask = (id) => {
+    playDeleteSound();
+    setTasks(tasks.filter(t => t.id !== id));
+  };
+
+  // --- MÉTODOS PARA HÁBITOS (Planes 90 días) ---
+  const toggleHabit = (id) => {
+    setHabits(habits.map(h => {
+      if (h.id === id) {
+        const isDoneToday = h.logs.includes(todayStr);
+        let newLogs;
+        if (isDoneToday) {
+          newLogs = h.logs.filter(date => date !== todayStr); // Destachar
+        } else {
+          newLogs = [...h.logs, todayStr]; // Tachar
+          playCheckSound();
+        }
+        return { ...h, logs: newLogs };
+      }
+      return h;
+    }));
+  };
+
+  const deleteHabit = (id) => {
+    if (window.confirm("¿Seguro que quieres eliminar este Plan de 90 Días? Se perderá su progreso.")) {
+      playDeleteSound();
+      setHabits(habits.filter(h => h.id !== id));
+    }
+  };
+
+  // --- SUGERENCIA INTELIGENTE (Mejorada con Fechas) ---
+  const autoSuggest = () => {
+    let available = [...tasks.filter(t => !t.isToday && !t.done)].sort((a, b) => {
+      // 1. Dar prioridad a las que tienen fecha límite y organizarlas cronológicamente
+      if (a.dueDate && b.dueDate) return new Date(a.dueDate) - new Date(b.dueDate);
+      if (a.dueDate) return -1;
+      if (b.dueDate) return 1;
+      // 2. Si no tienen fecha, ordenar por urgencia y prioridad
+      return (b.urgency + b.priority) - (a.urgency + a.priority);
+    });
+    
+    const toSuggest = available.slice(0, 3).map(t => t.id);
+    if (toSuggest.length > 0) {
+      setTasks(tasks.map(t => toSuggest.includes(t.id) ? { ...t, isToday: true } : t));
+      setView('hoy');
+      playTone(300, 'sawtooth', 0.1);
+      setTimeout(() => playTone(600, 'sawtooth', 0.2), 150);
+      setTimeout(() => playTone(900, 'sawtooth', 0.3), 300);
+    } else {
+      alert("La Bóveda está vacía o todo está completado. ¡A descansar!");
+    }
+  };
+
+  const closeDay = () => {
+    const dateLabel = new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const completedTasks = todayTasks.filter(t => t.done);
+    const dateKey = getTodayStr(); // Clave técnica para la gráfica
+    
+    // Guardar en historial con estado de ánimo
+    setHistory(prev => ({ 
+        ...prev, 
+        [dateKey]: {
+            label: dateLabel,
+            mood: dayMood,
+            tasks: [...(prev[dateKey]?.tasks || []), ...completedTasks]
+        }
+    }));
+
+    // Regresar tareas no completadas a la bóveda y eliminar las completadas de la lista principal
+    setTasks(prevTasks => {
+      return prevTasks
+        .filter(t => !(t.isToday && t.done))
+        .map(t => t.isToday && !t.done ? { ...t, isToday: false } : t);
+    });
+
+    playWinSound();
+    setView('historial');
+  };
+
+  const exportData = () => {
+    const dataToExport = { tasks, habits, history };
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(dataToExport));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", "tostiloko_backup_" + new Date().toISOString().split('T')[0] + ".json");
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
+
+  const handleImport = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const importedData = JSON.parse(event.target.result);
+        if (importedData.tasks || importedData.habits) {
+          if (importedData.tasks) setTasks(importedData.tasks);
+          if (importedData.habits) setHabits(importedData.habits);
+          if (importedData.history) setHistory(importedData.history);
+        } else if (Array.isArray(importedData)) {
+          setTasks(importedData); // Soporte retroactivo
+        }
+        alert("Datos importados con éxito, Master.");
+      } catch (err) {
+        alert("Error leyendo el archivo.");
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // Ordenar la Bóveda para mostrar primero lo que tiene fecha próxima
+  const vaultTasks = tasks.filter(t => !t.isToday).sort((a, b) => {
+    if (a.dueDate && b.dueDate) return new Date(a.dueDate) - new Date(b.dueDate);
+    if (a.dueDate) return -1;
+    if (b.dueDate) return 1;
+    return 0;
+  });
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-emerald-400 font-mono flex flex-col items-center p-2 sm:p-4 selection:bg-fuchsia-900 overflow-hidden relative">
+      
+      {/* Cargar Fuentes Mejoradas: Orbitron en lugar de pixelada */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Orbitron:wght@500;700;900&family=Share+Tech+Mono&display=swap');
+        
+        .font-tech { font-family: 'Share Tech Mono', monospace; }
+        .font-handwriting { font-family: 'Caveat', cursive; font-size: 1.9rem; letter-spacing: 1px; }
+        .font-display { font-family: 'Orbitron', sans-serif; } /* Nueva fuente tecnológica clara */
+        
+        .grid-paper {
+          background-color: #f8fafc;
+          background-image: 
+            linear-gradient(rgba(14, 165, 233, 0.3) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(14, 165, 233, 0.3) 1px, transparent 1px);
+          background-size: 24px 24px;
+          box-shadow: 
+            inset 0 0 20px rgba(0,0,0,0.1),
+            0 0 25px rgba(217, 70, 239, 0.3);
+          border-left: 3px solid rgba(239, 68, 68, 0.6);
+          position: relative;
+        }
+        
+        .scanline {
+          position: fixed;
+          top: 0; left: 0; width: 100vw; height: 100vh;
+          background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2));
+          background-size: 100% 4px;
+          pointer-events: none;
+          z-index: 50;
+          opacity: 0.15;
+        }
+
+        .crt-flicker { animation: flicker 0.15s infinite; }
+        @keyframes flicker { 0% { opacity: 0.96; } 100% { opacity: 1; } }
+        
+        .ink-strikethrough {
+          position: relative;
+          color: #64748b;
+          transition: color 0.3s ease;
+        }
+        .ink-strikethrough::after {
+          content: '';
+          position: absolute;
+          left: -2%;
+          top: 55%;
+          width: 0;
+          height: 4px;
+          background-color: #1d4ed8;
+          transform: rotate(-1deg);
+          border-radius: 2px;
+          animation: markerStrike 0.35s ease-out forwards;
+          opacity: 0.8;
+        }
+        @keyframes markerStrike { 0% { width: 0; } 100% { width: 104%; } }
+
+        .check-mark-anim {
+          stroke-dasharray: 100;
+          stroke-dashoffset: 100;
+          animation: drawCheck 0.3s ease forwards, bounceCheck 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        @keyframes drawCheck { to { stroke-dashoffset: 0; } }
+        @keyframes bounceCheck {
+          0% { transform: scale(0.5); }
+          50% { transform: scale(1.2); }
+          100% { transform: scale(1); }
+        }
+        
+        .celebration-overlay {
+          position: absolute;
+          inset: 0;
+          z-index: 100;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          align-items: center;
+          background: rgba(0, 0, 0, 0.85);
+          animation: bgDisco 0.4s infinite alternate;
+          overflow: hidden;
+        }
+        @keyframes bgDisco {
+          0% { box-shadow: inset 0 0 100px #f0f; }
+          33% { box-shadow: inset 0 0 100px #0ff; }
+          66% { box-shadow: inset 0 0 100px #0f0; }
+          100% { box-shadow: inset 0 0 100px #ff0; }
+        }
+        .neon-text-win {
+          color: #fff;
+          text-shadow: 0 0 10px #fff, 0 0 20px #f0f, 0 0 40px #f0f, 0 0 80px #f0f;
+          animation: bounceScale 0.4s infinite alternate;
+          text-align: center;
+        }
+        @keyframes bounceScale { 0% { transform: scale(1) rotate(-2deg); } 100% { transform: scale(1.15) rotate(2deg); } }
+        .ink-blue { color: #1d4ed8; }
+        .task-enter { animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+
+        /* Estilos para el Toast TDAH */
+        .tdah-toast {
+            animation: slideUpFade 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        @keyframes slideUpFade {
+            0% { transform: translateY(50px) translateX(-50%); opacity: 0; }
+            100% { transform: translateY(0) translateX(-50%); opacity: 1; }
+        }
+
+        /* Animación de Intro (Boot Screen) */
+        .boot-screen {
+            position: fixed;
+            inset: 0;
+            background-color: #000;
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        
+        .logo-intro-anim {
+            width: 150px;
+            height: auto;
+            opacity: 0;
+            transform: scale(0.5);
+            animation: 
+                netflixPop 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards 0.5s,
+                glowPulse 2s infinite alternate 1.5s;
+        }
+
+        @keyframes netflixPop {
+            0% { opacity: 0; transform: scale(0.5); filter: brightness(0) blur(10px); }
+            70% { opacity: 1; transform: scale(1.2); filter: brightness(2) blur(0px); }
+            100% { opacity: 1; transform: scale(1); filter: brightness(1) blur(0px); }
+        }
+
+        @keyframes glowPulse {
+            0% { filter: drop-shadow(0 0 10px rgba(217, 70, 239, 0.4)); }
+            100% { filter: drop-shadow(0 0 30px rgba(217, 70, 239, 0.8)); }
+        }
+        
+        .fade-out {
+            animation: fadeOut 0.5s ease-out forwards;
+        }
+        
+        @keyframes fadeOut {
+            to { opacity: 0; visibility: hidden; }
+        }
+      `}} />
+
+      {/* PANTALLA DE STANDBY / CARGA (INTRO) */}
+      {systemStatus === 'standby' && (
+          <div className="boot-screen" onClick={startBootSequence} style={{cursor: 'pointer'}}>
+              <div className="flex flex-col items-center justify-center text-emerald-500 animate-pulse hover:scale-110 transition-transform">
+                  <Power size={80} className="mb-6 drop-shadow-[0_0_25px_rgba(16,185,129,0.8)]" />
+                  <p className="font-display font-black text-2xl sm:text-4xl tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-400 to-emerald-400 text-center">
+                      INICIAR TOSTILOKO OS
+                  </p>
+                  <p className="font-tech mt-4 text-emerald-200/50 text-sm tracking-widest uppercase">
+                      Haga clic en la pantalla para bootear
+                  </p>
+              </div>
+          </div>
+      )}
+
+      {systemStatus === 'booting' && (
+          <div className="boot-screen">
+              <img 
+                  src="tostiloko.png" 
+                  alt="TostiloKo Mascot" 
+                  className="logo-intro-anim"
+                  onError={(e) => {
+                      e.target.onerror = null; 
+                      // Fallback visual si no encuentra la imagen
+                      e.target.outerHTML = '<div class="logo-intro-anim text-fuchsia-500 font-display font-black text-6xl">TK</div>';
+                  }}
+              />
+          </div>
+      )}
+
+      <div className="scanline"></div>
+
+      {/* TOAST NOTIFICATION */}
+      {toastMessage && (
+          <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-slate-900 border-2 border-fuchsia-500 rounded-lg p-4 shadow-[0_0_20px_rgba(217,70,239,0.4)] tdah-toast w-11/12 max-w-md">
+              <div className="flex gap-3 items-start">
+                  <Cpu className="text-fuchsia-400 mt-1 flex-shrink-0 animate-pulse" size={24} />
+                  <div>
+                      <p className="font-display font-bold text-fuchsia-300 text-sm mb-1">SISTEMA CORTICAL OPINA:</p>
+                      <p className="font-tech text-emerald-100 text-sm">{toastMessage}</p>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {showCelebration && (
+        <div className="celebration-overlay backdrop-blur-sm">
+          <div className="neon-text-win flex flex-col items-center z-10">
+            <Gamepad2 size={100} className="mb-6 text-yellow-400 animate-spin" style={{animationDuration: '3s'}} />
+            <p className="font-display font-black text-4xl md:text-6xl mb-4 leading-tight">¡PERFECT!</p>
+            <p className="font-display font-bold text-2xl md:text-3xl text-emerald-400">DOPAMINA OVERFLOW</p>
+            <div className="mt-8 text-fuchsia-300 font-tech text-2xl animate-pulse">+9999 XP</div>
+          </div>
+          {[...Array(20)].map((_, i) => (
+            <div key={i} className="absolute w-4 h-4 rounded-sm" style={{
+              left: (Math.random() * 100) + '%',
+              top: (Math.random() * 100) + '%',
+              backgroundColor: ['#f0f', '#0ff', '#0f0', '#ff0'][Math.floor(Math.random()*4)],
+              animation: 'bounceScale ' + (0.2 + Math.random() * 0.5) + 's infinite alternate'
+            }}></div>
+          ))}
+        </div>
+      )}
+
+      <div className="w-full max-w-4xl border-4 border-fuchsia-700 bg-slate-900 rounded-xl shadow-[0_0_30px_rgba(217,70,239,0.3)] flex flex-col h-[95vh] crt-flicker relative z-10 overflow-hidden">
+        
+        {/* HEADER / HUD */}
+        <div className="bg-slate-950 border-b-2 border-fuchsia-700 p-3 sm:p-4 flex flex-col gap-3 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl"></div>
+          <div className="absolute bottom-0 left-0 w-32 h-32 bg-fuchsia-500/10 rounded-full blur-3xl"></div>
+
+          <div className="flex justify-between items-center relative z-10">
+            <div className="flex items-center gap-2">
+              <div className="p-1 rounded-lg shadow-[0_0_15px_rgba(217,70,239,0.5)] bg-slate-900 border border-fuchsia-600/50">
+                {/* Logo en el Header */}
+                <img 
+                    src="tostiloko.png" 
+                    alt="Logo" 
+                    className="w-8 h-8 object-contain"
+                    onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.outerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-fuchsia-400 m-1"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line></svg>';
+                    }}
+                />
+              </div>
+              <h1 className="text-xl sm:text-2xl font-black tracking-widest font-display text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-400 via-emerald-400 to-amber-400 drop-shadow-md py-1">
+                TostiloKo OS 1.1
+              </h1>
+            </div>
+            
+            <div className="flex gap-2">
+              <button onClick={() => fileInputRef.current.click()} className="p-2 bg-slate-800/80 hover:bg-emerald-900/50 rounded-lg transition-all border border-slate-700 hover:border-emerald-500 text-emerald-500">
+                <Upload size={18} />
+              </button>
+              <input type="file" ref={fileInputRef} onChange={handleImport} className="hidden" accept=".json" />
+              <button onClick={exportData} className="p-2 bg-slate-800/80 hover:bg-amber-900/50 rounded-lg transition-all border border-slate-700 hover:border-amber-500 text-amber-500">
+                <Save size={18} />
+              </button>
+            </div>
+          </div>
+
+          <div className="w-full relative z-10 bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+            <div className="flex justify-between text-xs mb-1.5 font-tech">
+              <span className="text-emerald-400">EXP DIARIA: {totalCompletedToday}/{totalItemsToday}</span>
+              <span className="text-fuchsia-400">{Math.round(progress)}% COMBUSTIBLE</span>
+            </div>
+            <div className="h-4 w-full bg-slate-950 rounded border border-slate-700 overflow-hidden relative shadow-inner">
+              <div 
+                className="h-full bg-gradient-to-r from-emerald-500 via-amber-400 to-fuchsia-500 shadow-[0_0_15px_rgba(217,70,239,0.5)] transition-all duration-700 ease-out flex items-center justify-end pr-1"
+                style={{ width: `${progress}%` }}
+              >
+                {progress > 10 && <div className="w-1 h-2 bg-white/50 rounded-full animate-pulse"></div>}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* NAVEGACIÓN */}
+        <div className="flex bg-slate-900 border-b-2 border-fuchsia-900 font-tech text-xs sm:text-sm">
+          <NavButton active={view === 'hoy'} onClick={() => setView('hoy')} color="emerald" icon={<Zap size={16}/>} text="HOY" />
+          <NavButton active={view === 'boveda'} onClick={() => setView('boveda')} color="fuchsia" icon={<Box size={16}/>} text="BÓVEDA" />
+          <NavButton active={view === 'planes'} onClick={() => setView('planes')} color="amber" icon={<Target size={16}/>} text="PLANES 90D" />
+          <NavButton active={view === 'historial'} onClick={() => setView('historial')} color="blue" icon={<Archive size={16}/>} text="HISTORIAL" />
+          <button 
+            onClick={() => setView('add')}
+            className={`px-3 sm:px-6 flex justify-center items-center transition-all duration-300 font-bold ${view === 'add' ? 'bg-amber-500 text-slate-900 border-b-4 border-amber-300' : 'bg-slate-800 text-amber-500 border-b-4 border-transparent hover:bg-slate-700'}`}
+          >
+            <Plus size={20} className={view === 'add' ? 'rotate-45 transition-transform' : 'transition-transform'} />
+          </button>
+        </div>
+
+        {/* ÁREA PRINCIPAL */}
+        <div className="flex-1 overflow-y-auto bg-slate-900 p-2 sm:p-4">
+          
+          {view === 'add' && (
+            <TaskForm 
+              onSave={(data, type) => {
+                if (type === 'habit') {
+                  setHabits([...habits, data]);
+                  setView('planes');
+                } else {
+                  setTasks([...tasks, data]);
+                  setView(data.isToday ? 'hoy' : 'boveda');
+                }
+                playTone(600, 'triangle', 0.1);
+              }} 
+              onCancel={() => setView('hoy')} 
+            />
+          )}
+
+          {view === 'planes' && <HabitsDashboard habits={habits} onDelete={deleteHabit} />}
+
+          {(view !== 'add' && view !== 'planes') && (
+            <div className="min-h-full h-max grid-paper rounded-md p-4 pb-12 pt-6 text-gray-800">
+              <div className="absolute left-8 top-0 bottom-0 w-px bg-red-500 opacity-50 hidden sm:block"></div>
+              
+              <div className="sm:pl-10 relative z-10">
+                <div className="flex justify-between items-end mb-6 border-b-2 border-blue-400/40 pb-2">
+                  <h2 className="font-handwriting text-3xl sm:text-4xl ink-blue font-bold uppercase tracking-widest flex items-center gap-2">
+                    {view === 'hoy' ? 'OBJETIVOS DE HOY' : view === 'boveda' ? 'ARCHIVO MAESTRO' : 'REGISTROS PASADOS'}
+                  </h2>
+                  
+                  {view === 'boveda' && (
+                    <button onClick={autoSuggest} className="font-tech text-xs bg-fuchsia-700 text-white px-3 py-1.5 rounded-full border border-fuchsia-400 flex items-center gap-1.5 hover:bg-fuchsia-600 hover:scale-105 transition-all shadow-[0_0_10px_rgba(217,70,239,0.5)]">
+                      <RefreshCw size={14} className="animate-spin-slow" /> SUGERIR
+                    </button>
+                  )}
+                  {view === 'hoy' && (
+                    <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2 sm:gap-4">
+                        <div className="flex items-center bg-slate-100 border border-blue-200 rounded-full p-1 shadow-inner gap-1">
+                            <button onClick={() => setDayMood('rifado')} className={`p-1.5 rounded-full transition-all ${dayMood === 'rifado' ? 'bg-emerald-200 text-emerald-700 shadow-sm scale-110' : 'text-slate-400 hover:bg-slate-200'}`} title="Día Rifado"><Smile size={18}/></button>
+                            <button onClick={() => setDayMood('meh')} className={`p-1.5 rounded-full transition-all ${dayMood === 'meh' ? 'bg-amber-200 text-amber-700 shadow-sm scale-110' : 'text-slate-400 hover:bg-slate-200'}`} title="Día Meh"><Meh size={18}/></button>
+                            <button onClick={() => setDayMood('llorar')} className={`p-1.5 rounded-full transition-all ${dayMood === 'llorar' ? 'bg-red-200 text-red-700 shadow-sm scale-110' : 'text-slate-400 hover:bg-slate-200'}`} title="Día Pa' Llorar"><Frown size={18}/></button>
+                        </div>
+                        <button onClick={closeDay} className="font-tech text-xs bg-emerald-700 text-white px-3 py-2 sm:py-1.5 rounded-full border border-emerald-400 flex items-center gap-1.5 hover:bg-emerald-600 hover:scale-105 transition-all shadow-[0_0_10px_rgba(16,185,129,0.5)]">
+                        <Power size={14} /> CERRAR CICLO
+                        </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-4">
+                  {view === 'historial' && (
+                    Object.keys(history).length === 0 ? <EmptyState icon={<Archive size={48} />} text="Sin registros aún" /> :
+                    <>
+                        <MoodTrackerChart history={history} />
+                        {Object.entries(history).sort((a,b) => new Date(b[0]) - new Date(a[0])).map(([dateKey, dayData]) => (
+                        <div key={dateKey} className="mb-6">
+                            <div className="flex items-center gap-3 mb-2 border-b border-blue-200 pb-1">
+                                <h3 className="font-tech text-blue-700 font-bold uppercase tracking-wider">{dayData.label || dateKey}</h3>
+                                {dayData.mood === 'rifado' && <span className="bg-emerald-100 text-emerald-700 p-1 rounded-full"><Smile size={14}/></span>}
+                                {dayData.mood === 'meh' && <span className="bg-amber-100 text-amber-700 p-1 rounded-full"><Meh size={14}/></span>}
+                                {dayData.mood === 'llorar' && <span className="bg-red-100 text-red-700 p-1 rounded-full"><Frown size={14}/></span>}
+                            </div>
+                            <div className="pl-4 border-l-2 border-blue-200">
+                            {(dayData.tasks || []).map(task => (
+                                <div key={task.id} className="font-handwriting text-xl text-slate-500 mb-2">
+                                <span className="ink-strikethrough">{task.text}</span>
+                                </div>
+                            ))}
+                            </div>
+                        </div>
+                        ))}
+                    </>
+                  )}
+
+                  {view === 'hoy' && (
+                    <>
+                      {/* Renderizar Planes 90 Días Activos en la vista de HOY */}
+                      {activeHabitsToday.map(habit => (
+                        <TaskItem 
+                          key={habit.id} 
+                          task={{ ...habit, done: habit.logs.includes(todayStr), isHabit: true }} 
+                          onToggle={() => toggleHabit(habit.id)}
+                          view={view}
+                        />
+                      ))}
+                      
+                      {/* Renderizar Tareas de Hoy */}
+                      {todayTasks.map(task => (
+                        <TaskItem 
+                          key={task.id} 
+                          task={task} 
+                          onToggle={() => toggleTask(task.id)}
+                          onMove={(toToday) => moveTask(task.id, toToday)}
+                          onDelete={() => deleteTask(task.id)}
+                          view={view}
+                        />
+                      ))}
+                      
+                      {(activeHabitsToday.length === 0 && todayTasks.length === 0) && <EmptyState icon={<Gamepad2 size={48} />} text="Nivel Despejado" />}
+                    </>
+                  )}
+
+                  {view === 'boveda' && (
+                    vaultTasks.length === 0 ? <EmptyState icon={<Box size={48} />} text="Bóveda vacía" /> :
+                    vaultTasks.map(task => (
+                      <TaskItem 
+                        key={task.id} 
+                        task={task} 
+                        onToggle={() => toggleTask(task.id)}
+                        onMove={(toToday) => moveTask(task.id, toToday)}
+                        onDelete={() => deleteTask(task.id)}
+                        view={view}
+                      />
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      </div>
+      
+      <p className="mt-3 text-xs text-slate-500 font-tech tracking-widest flex items-center gap-2">
+        Creado por <a href="https://estudio.xidito.com/" target="_blank" rel="noopener noreferrer" className="text-fuchsia-500 font-bold hover:text-fuchsia-300 transition-colors hover:underline flex items-center gap-1">Ferrán el Tostiloko Xidito <Zap size={10} className="text-amber-500"/></a>
+      </p>
+    </div>
+  );
+}
+
+// --- SUBCOMPONENTES ---
+
+// --- GRÁFICA DE ÁNIMO ---
+function MoodTrackerChart({ history }) {
+    // Filtrar los últimos 30 días
+    const today = new Date();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(today.getDate() - 30);
+
+    const recentHistory = Object.entries(history).filter(([dateKey]) => {
+        return new Date(dateKey) >= thirtyDaysAgo;
+    });
+
+    let rifado = 0; let meh = 0; let llorar = 0;
+    
+    recentHistory.forEach(([_, data]) => {
+        if(data.mood === 'rifado') rifado++;
+        if(data.mood === 'meh') meh++;
+        if(data.mood === 'llorar') llorar++;
+    });
+
+    const total = rifado + meh + llorar;
+    if(total === 0) return null;
+
+    const pRifado = (rifado/total)*100;
+    const pMeh = (meh/total)*100;
+    const pLlorar = (llorar/total)*100;
+
+    return (
+        <div className="mb-8 bg-slate-50 border border-blue-100 rounded-xl p-4 shadow-sm">
+            <h3 className="font-display font-bold text-blue-800 mb-3 text-sm flex items-center gap-2">
+                <BarChart2 size={16}/> MONTAÑA RUSA EMOCIONAL (ÚLTIMOS 30 DÍAS)
+            </h3>
+            
+            <div className="w-full h-4 flex rounded-full overflow-hidden mb-3 border border-slate-200 shadow-inner">
+                {pRifado > 0 && <div style={{width: `${pRifado}%`}} className="bg-emerald-400 transition-all duration-1000"></div>}
+                {pMeh > 0 && <div style={{width: `${pMeh}%`}} className="bg-amber-400 transition-all duration-1000"></div>}
+                {pLlorar > 0 && <div style={{width: `${pLlorar}%`}} className="bg-red-400 transition-all duration-1000"></div>}
+            </div>
+
+            <div className="flex justify-between font-tech text-xs">
+                <div className="flex items-center gap-1 text-emerald-700"><Smile size={14}/> Rifado ({rifado})</div>
+                <div className="flex items-center gap-1 text-amber-700"><Meh size={14}/> Meh ({meh})</div>
+                <div className="flex items-center gap-1 text-red-700"><Frown size={14}/> Llorar ({llorar})</div>
+            </div>
+        </div>
+    );
+}
+
+function NavButton({ active, onClick, color, icon, text }) {
+  const colors = {
+    emerald: 'bg-emerald-950/50 text-emerald-300 border-emerald-500 shadow-[inset_0_-10px_20px_rgba(16,185,129,0.1)] hover:text-emerald-400',
+    fuchsia: 'bg-fuchsia-950/50 text-fuchsia-300 border-fuchsia-500 shadow-[inset_0_-10px_20px_rgba(217,70,239,0.1)] hover:text-fuchsia-400',
+    amber: 'bg-amber-950/50 text-amber-300 border-amber-500 shadow-[inset_0_-10px_20px_rgba(245,158,11,0.1)] hover:text-amber-400',
+    blue: 'bg-blue-950/50 text-blue-300 border-blue-500 shadow-[inset_0_-10px_20px_rgba(59,130,246,0.1)] hover:text-blue-400',
+  };
+  
+  return (
+    <button 
+      onClick={onClick}
+      className={`flex-1 py-3 sm:py-4 flex justify-center items-center gap-1 sm:gap-2 transition-all duration-300 ${active ? `${colors[color].split(' hover:')[0]} border-b-4` : `text-slate-500 hover:bg-slate-800 border-b-4 border-transparent ${colors[color].split(' ').pop()}`}`}
+    >
+      {icon} <span className="hidden sm:inline font-bold">{text}</span>
+    </button>
+  );
+}
+
+function EmptyState({ icon, text }) {
+  return (
+    <div className="flex flex-col items-center justify-center mt-12 opacity-50">
+      <div className="text-blue-400 mb-4">{icon}</div>
+      <p className="font-handwriting text-3xl text-blue-600 italic text-center">~ {text} ~</p>
+    </div>
+  );
+}
+
+function TaskItem({ task, onToggle, onMove, onDelete, view }) {
+  const renderTags = () => {
+    return (
+      <div className="flex flex-wrap gap-2 items-center mt-1.5 text-[0.7rem] font-tech tracking-wider uppercase">
+        {task.isHabit && (
+          <span className="px-2 py-0.5 rounded-full border shadow-sm flex items-center gap-1 bg-amber-100 border-amber-300 text-amber-700 font-bold">
+            <Target size={10} /> PLAN 90 DÍAS
+          </span>
+        )}
+        {task.dueDate && !task.isHabit && (
+          <span className="px-2 py-0.5 rounded-full border shadow-sm flex items-center gap-1 bg-indigo-100 border-indigo-300 text-indigo-700 font-bold">
+            <CalendarDays size={10} /> VENCE: {new Date(task.dueDate + 'T12:00:00').toLocaleDateString('es-MX', {day: '2-digit', month: 'short'})}
+          </span>
+        )}
+        {task.urgency > 0 && !task.isHabit && (
+          <span className={`px-2 py-0.5 rounded-full border shadow-sm flex items-center gap-1 ${task.urgency === 3 ? 'bg-red-100 border-red-300 text-red-700 font-bold' : task.urgency === 2 ? 'bg-orange-100 border-orange-300 text-orange-700' : 'bg-emerald-100 border-emerald-300 text-emerald-700'}`}>
+            <AlertTriangle size={10} />
+            {task.urgency === 3 ? 'CRÍTICO' : task.urgency === 2 ? 'ALTO' : 'BAJO'}
+          </span>
+        )}
+        {task.priority > 0 && !task.isHabit && (
+          <span className={`px-2 py-0.5 rounded-full border shadow-sm flex items-center gap-1 ${task.priority === 3 ? 'bg-purple-100 border-purple-300 text-purple-700 font-bold' : task.priority === 2 ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-slate-100 border-slate-300 text-slate-700'}`}>
+            <Star size={10} /> PRI:{task.priority}
+          </span>
+        )}
+        {task.details && !task.isHabit && (
+          <span className="text-slate-500 italic lowercase truncate max-w-[150px] sm:max-w-xs">({task.details})</span>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className={`group flex items-start gap-3 p-2 transition-all task-enter ${task.done ? 'opacity-60' : 'hover:bg-blue-50/50 rounded-lg'}`}>
+      <button onClick={onToggle} className="mt-1 flex-shrink-0 w-8 h-8 flex items-center justify-center text-blue-600 hover:scale-125 transition-transform transform origin-center">
+        {task.done ? (
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 16 l7 7 l15 -15" className="check-mark-anim" />
+          </svg>
+        ) : (
+          <div className={`w-5 h-5 border-2 rounded-sm opacity-60 hover:opacity-100 transition-opacity hover:rotate-12 ${task.isHabit ? 'border-amber-500 hover:bg-amber-100/50' : 'border-blue-400 hover:border-fuchsia-500 hover:bg-blue-100/50'}`}></div>
+        )}
+      </button>
+
+      <div className="flex-1 min-w-0 pt-0.5">
+        <span className={`font-handwriting uppercase leading-none block break-words text-2xl ${task.done ? 'ink-strikethrough' : 'ink-blue'}`}>
+          {task.text}
+        </span>
+        {renderTags()}
+      </div>
+
+      {!task.isHabit && (
+        <div className="opacity-0 group-hover:opacity-100 flex gap-2 transition-opacity font-tech mt-1">
+          {view === 'boveda' ? (
+            <button onClick={() => onMove(true)} className="p-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 hover:scale-110 border border-emerald-300 rounded shadow-sm transition-all" title="Mover a Hoy"><Zap size={14} /></button>
+          ) : (
+            <button onClick={() => onMove(false)} className="p-2 bg-slate-200 text-slate-700 hover:bg-slate-300 hover:scale-110 border border-slate-300 rounded shadow-sm transition-all" title="Devolver a Bóveda"><Box size={14} /></button>
+          )}
+          <button onClick={onDelete} className="p-2 bg-red-100 text-red-600 hover:bg-red-200 hover:scale-110 border border-red-300 rounded shadow-sm transition-all" title="Eliminar"><Trash2 size={14} /></button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- PANEL DE PLANES 90 DÍAS ---
+function HabitsDashboard({ habits, onDelete }) {
+  // Función para calcular racha (días seguidos hasta hoy o ayer)
+  const calculateStreak = (logs) => {
+    if (!logs || logs.length === 0) return 0;
+    const sortedLogs = [...logs].sort((a,b) => new Date(b) - new Date(a));
+    const today = getTodayStr();
+    
+    let current = new Date();
+    let streak = 0;
+    
+    // Ver si incluye hoy
+    if (sortedLogs.includes(today)) {
+      streak++;
+      current.setDate(current.getDate() - 1);
+    } else {
+      // Si no incluye hoy, revisamos ayer para ver si la racha sigue viva
+      let yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      if (!sortedLogs.includes(yesterday.toISOString().split('T')[0])) {
+        return 0; // Racha rota
+      }
+      current = yesterday;
+    }
+
+    // Contar hacia atrás
+    while(true) {
+      let dStr = current.toISOString().split('T')[0];
+      if (sortedLogs.includes(dStr)) {
+        streak++;
+        current.setDate(current.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+    return streak;
+  };
+
+  return (
+    <div className="h-full flex flex-col gap-4 animate-fade-in-up">
+      <div className="bg-slate-900 border-2 border-amber-600 p-4 rounded-xl shadow-[0_0_20px_rgba(245,158,11,0.2)]">
+        <h2 className="text-xl md:text-2xl font-display font-bold text-amber-400 mb-2 flex items-center gap-2">
+          <Target /> REPORTE 90 DÍAS
+        </h2>
+        <p className="text-sm font-tech text-slate-400">
+          Tus planes se auto-asignarán a "HOY" todos los días. ¡No rompas la racha!
+        </p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {habits.length === 0 ? (
+          <div className="col-span-full p-8 text-center font-tech text-slate-500 border border-dashed border-slate-700 rounded-lg">
+            No tienes planes de 90 días activos. Inyecta uno desde "Nueva Actividad".
+          </div>
+        ) : (
+          habits.map(habit => {
+            const progress = habit.logs.length;
+            const remaining = 90 - progress;
+            const streak = calculateStreak(habit.logs);
+            const progressPercent = (progress / 90) * 100;
+
+            return (
+              <div key={habit.id} className="bg-slate-950 border border-slate-800 p-4 rounded-lg relative overflow-hidden group">
+                <div className="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
+                <div className="flex justify-between items-start mb-2 pl-2">
+                  <h3 className="font-display font-bold text-lg text-emerald-300 uppercase truncate">{habit.text}</h3>
+                  <button onClick={() => onDelete(habit.id)} className="text-slate-600 hover:text-red-500 transition-colors">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+                
+                <div className="grid grid-cols-3 gap-2 mb-4 pl-2 font-tech text-xs text-center">
+                  <div className="bg-slate-900 p-2 rounded border border-slate-800">
+                    <span className="block text-slate-500 mb-1">RACHA</span>
+                    <span className="text-amber-400 font-bold text-base flex items-center justify-center gap-1"><Flame size={14}/> {streak} Días</span>
+                  </div>
+                  <div className="bg-slate-900 p-2 rounded border border-slate-800">
+                    <span className="block text-slate-500 mb-1">PROGRESO</span>
+                    <span className="text-emerald-400 font-bold text-base">{progress}/90</span>
+                  </div>
+                  <div className="bg-slate-900 p-2 rounded border border-slate-800">
+                    <span className="block text-slate-500 mb-1">FALTAN</span>
+                    <span className="text-fuchsia-400 font-bold text-base">{remaining}</span>
+                  </div>
+                </div>
+
+                <div className="pl-2">
+                  <div className="w-full h-3 bg-slate-900 rounded-full border border-slate-700 overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-amber-600 to-amber-400 transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div>
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TaskForm({ onSave, onCancel }) {
+  const [text, setText] = useState('');
+  const [type, setType] = useState('task'); // 'task' | 'habit'
+  const [isToday, setIsToday] = useState(true);
+  const [urgency, setUrgency] = useState(0);
+  const [priority, setPriority] = useState(0);
+  const [dueDate, setDueDate] = useState('');
+  const [details, setDetails] = useState('');
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!text.trim()) return;
+    
+    if (type === 'habit') {
+      onSave({
+        id: 'habit_' + Date.now().toString(),
+        text: text.toUpperCase(),
+        createdAt: getTodayStr(),
+        logs: []
+      }, 'habit');
+    } else {
+      onSave({
+        id: Date.now().toString(),
+        text: text.toUpperCase(),
+        done: false,
+        isToday,
+        urgency: Number(urgency),
+        priority: Number(priority),
+        dueDate,
+        details
+      }, 'task');
+    }
+  };
+
+  return (
+    <div className="h-full flex flex-col font-tech text-emerald-300 p-2 sm:p-6 animate-fade-in-up">
+      <h2 className="text-2xl mb-6 flex items-center gap-3 border-b-2 border-fuchsia-800 pb-3 font-display font-bold text-fuchsia-400">
+        <Plus className="text-amber-400" /> NUEVA ACTIVIDAD
+      </h2>
+      
+      <form onSubmit={handleSubmit} className="flex flex-col gap-6 flex-1">
+        
+        <div className="flex flex-col gap-2">
+          <label className="text-xs text-emerald-500 uppercase tracking-widest flex items-center gap-2">
+            <Gamepad2 size={14} /> DESIGNACIÓN DEL OBJETIVO *
+          </label>
+          <input 
+            type="text" autoFocus value={text} onChange={e => setText(e.target.value)}
+            className="bg-slate-900 border-2 border-fuchsia-800 p-4 text-xl focus:outline-none focus:border-emerald-400 focus:shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all rounded-lg uppercase text-white placeholder-slate-600 font-display"
+            placeholder="EJ: CONQUISTAR EL MUNDO" required
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <button type="button" onClick={() => {setType('task'); setIsToday(true);}} className={`p-4 rounded-lg border-2 flex items-center justify-center gap-2 transition-all font-bold ${type==='task' && isToday ? 'bg-emerald-900/50 border-emerald-400 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.3)]' : 'border-slate-700 text-slate-500 hover:border-emerald-800 bg-slate-900'}`}>
+            <Zap size={18} /> A HOY
+          </button>
+          <button type="button" onClick={() => {setType('task'); setIsToday(false);}} className={`p-4 rounded-lg border-2 flex items-center justify-center gap-2 transition-all font-bold ${type==='task' && !isToday ? 'bg-fuchsia-900/50 border-fuchsia-400 text-fuchsia-300 shadow-[0_0_15px_rgba(217,70,239,0.3)]' : 'border-slate-700 text-slate-500 hover:border-fuchsia-800 bg-slate-900'}`}>
+            <Box size={18} /> A BÓVEDA
+          </button>
+          <button type="button" onClick={() => setType('habit')} className={`p-4 rounded-lg border-2 flex items-center justify-center gap-2 transition-all font-bold ${type==='habit' ? 'bg-amber-900/50 border-amber-400 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.3)]' : 'border-slate-700 text-slate-500 hover:border-amber-800 bg-slate-900'}`}>
+            <Target size={18} /> PLAN 90 DÍAS
+          </button>
+        </div>
+
+        {type === 'task' ? (
+          <div className="bg-slate-900 border border-slate-700 p-5 rounded-lg flex flex-col gap-5 relative overflow-hidden animate-fade-in-up">
+            <div className="text-xs text-amber-500 uppercase tracking-widest mb-1 flex items-center gap-2 font-bold"><Cpu size={14}/> MODIFICADORES TÁCTICOS</div>
+            
+            <div className="flex gap-5 flex-col sm:flex-row relative z-10">
+              <div className="flex-1">
+                <label className="text-xs text-slate-400 block mb-2">FECHA LÍMITE (OPCIONAL)</label>
+                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full bg-slate-950 border border-slate-600 p-3 rounded-lg text-sm text-emerald-200 outline-none focus:border-amber-500 transition-all cursor-pointer font-display" />
+              </div>
+            </div>
+
+            <div className="flex gap-5 flex-col sm:flex-row relative z-10">
+              <div className="flex-1">
+                <label className="text-xs text-slate-400 block mb-2">URGENCIA (TIEMPO)</label>
+                <select value={urgency} onChange={e => setUrgency(e.target.value)} className="w-full bg-slate-950 border border-slate-600 p-3 rounded-lg text-sm text-emerald-200 outline-none focus:border-amber-500 transition-all cursor-pointer">
+                  <option value="0">0 - NINGUNA</option>
+                  <option value="1">1 - BAJA</option>
+                  <option value="2">2 - MEDIA</option>
+                  <option value="3">3 - CRÍTICA (FUEGO)</option>
+                </select>
+              </div>
+              <div className="flex-1">
+                <label className="text-xs text-slate-400 block mb-2">PRIORIDAD (VALOR)</label>
+                <select value={priority} onChange={e => setPriority(e.target.value)} className="w-full bg-slate-950 border border-slate-600 p-3 rounded-lg text-sm text-emerald-200 outline-none focus:border-amber-500 transition-all cursor-pointer">
+                  <option value="0">0 - NINGUNA</option>
+                  <option value="1">1 - BAJA</option>
+                  <option value="2">2 - MEDIA</option>
+                  <option value="3">3 - ALTA</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="relative z-10">
+              <label className="text-xs text-slate-400 block mb-2">NOTAS OPERATIVAS (OPCIONAL)</label>
+              <input type="text" value={details} onChange={e => setDetails(e.target.value)} className="w-full bg-slate-950 border border-slate-600 p-3 rounded-lg text-sm text-emerald-200 outline-none focus:border-amber-500 transition-all placeholder-slate-700" placeholder="Detalles que no quieres olvidar..." />
+            </div>
+          </div>
+        ) : (
+          <div className="bg-amber-950/20 border border-amber-800/50 p-5 rounded-lg flex items-start gap-4 animate-fade-in-up text-amber-200/80 text-sm">
+             <BarChart2 size={32} className="text-amber-500 flex-shrink-0" />
+             <p>Al guardar como <strong>Plan de 90 Días</strong>, esta actividad no ocupará lugar en tu Bóveda. Aparecerá directamente en tu misión de <strong>HOY</strong> de manera recurrente hasta que logres completarla 90 veces. Generará historial estadístico propio.</p>
+          </div>
+        )}
+
+        <div className="flex gap-4 mt-auto pt-4 pb-2">
+          <button type="button" onClick={onCancel} className="flex-1 p-4 border border-slate-600 text-slate-400 rounded-lg hover:bg-slate-800 hover:text-white transition-all uppercase tracking-wider font-bold">ABORTAR</button>
+          <button type="submit" className="flex-[2] p-4 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white rounded-lg hover:from-emerald-500 hover:to-emerald-400 transition-all shadow-[0_0_20px_rgba(16,185,129,0.5)] hover:shadow-[0_0_25px_rgba(16,185,129,0.7)] uppercase tracking-wider font-bold flex justify-center items-center gap-2 transform hover:-translate-y-1">
+            <Save size={20} /> INYECTAR MISIÓN
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
