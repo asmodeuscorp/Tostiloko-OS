@@ -109,6 +109,18 @@
             0% { filter: drop-shadow(0 0 10px rgba(217, 70, 239, 0.4)); }
             100% { filter: drop-shadow(0 0 30px rgba(217, 70, 239, 0.8)); }
         }
+
+        /* Animación fastidiosa para el botón de ayuda */
+        @keyframes annoyingWiggle {
+            0%, 100% { transform: rotate(0deg) scale(1); }
+            20% { transform: rotate(-5deg) scale(1.05); }
+            40% { transform: rotate(5deg) scale(1.05); }
+            60% { transform: rotate(-5deg) scale(1.05); }
+            80% { transform: rotate(5deg) scale(1.05); }
+        }
+        .btn-help-wiggle {
+            animation: annoyingWiggle 3s infinite;
+        }
     </style>
 </head>
 <body>
@@ -196,6 +208,7 @@
           const [dayMood, setDayMood] = useState('meh');
           const [toastMessage, setToastMessage] = useState(null);
           const [systemStatus, setSystemStatus] = useState('standby');
+          const [showHelp, setShowHelp] = useState(false);
           const fileInputRef = useRef(null);
           
           const todayStr = getTodayStr();
@@ -386,13 +399,18 @@
               
               {systemStatus === 'standby' && (
                   <div className="boot-screen" onClick={startBootSequence} style={{cursor: 'pointer'}}>
-                      <div className="flex flex-col items-center justify-center text-emerald-500 animate-pulse hover:scale-110 transition-transform">
-                          <Icon i="power-off" size={80} className="mb-6 drop-shadow-[0_0_25px_rgba(16,185,129,0.8)]" />
+                      <div className="flex flex-col items-center justify-center animate-pulse hover:scale-110 transition-transform">
+                          <img 
+                              src="tostiloko.png" 
+                              alt="TostiloKo Logo" 
+                              className="w-48 h-auto mb-6 drop-shadow-[0_0_25px_rgba(217,70,239,0.8)]"
+                              onError={(e) => {
+                                  e.target.onerror = null; 
+                                  e.target.outerHTML = '<div class="text-fuchsia-500 font-display font-black text-6xl mb-6">TK</div>';
+                              }}
+                          />
                           <p className="font-display font-black text-2xl sm:text-4xl tracking-widest text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-400 to-emerald-400 text-center">
-                              INICIAR TOSTILOKO OS
-                          </p>
-                          <p className="font-tech mt-4 text-emerald-200/50 text-sm tracking-widest uppercase">
-                              Haga clic en la pantalla para bootear
+                              HAZ CLIC PARA INICIAR
                           </p>
                       </div>
                   </div>
@@ -413,6 +431,52 @@
               )}
 
               <div className="scanline"></div>
+
+              {/* MODAL DE AYUDA (SARCÁSTICA) */}
+              {showHelp && (
+                <div className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                  <div className="bg-slate-900 border-4 border-amber-500 rounded-xl p-6 max-w-2xl w-full shadow-[0_0_40px_rgba(245,158,11,0.5)] max-h-[90vh] overflow-y-auto">
+                    <div className="flex justify-between items-start mb-4 border-b-2 border-amber-500/50 pb-4">
+                      <h2 className="font-display font-black text-2xl text-amber-400 flex items-center gap-2">
+                        <Icon i="book-skull" size={24} /> MANUAL DE SUPERVIVENCIA
+                      </h2>
+                      <button onClick={() => setShowHelp(false)} className="text-slate-400 hover:text-red-500 transition-colors">
+                        <Icon i="xmark" size={24} />
+                      </button>
+                    </div>
+                    
+                    <div className="font-tech text-slate-300 space-y-4 text-sm leading-relaxed">
+                      <p className="italic text-amber-200">
+                        "Si estás leyendo esto, es porque ya te distrajiste o genuinamente no sabes qué picarle. Aquí te va la guía rápida antes de que veas otro video en TikTok."
+                      </p>
+                      
+                      <div className="bg-emerald-950/30 border border-emerald-800 p-3 rounded">
+                        <h3 className="font-bold text-emerald-400 mb-1 flex items-center gap-2"><Icon i="bolt"/> MISIÓN HOY</h3>
+                        <p>Tu única realidad. Lo que está aquí, se hace hoy. Si no está aquí, no existe. Punto. Ver una lista corta engaña a tu cerebro para que no entre en pánico.</p>
+                      </div>
+
+                      <div className="bg-fuchsia-950/30 border border-fuchsia-800 p-3 rounded">
+                        <h3 className="font-bold text-fuchsia-400 mb-1 flex items-center gap-2"><Icon i="box"/> LA BÓVEDA</h3>
+                        <p>El basurero mental. Avienta aquí todas las ideas y pendientes que tienes que hacer "algún día" (o nunca). Si tu cerebro está frito y no sabes qué hacer, pícale a <strong>SUGERIR</strong> y el sistema te escupirá tareas basándose en su urgencia.</p>
+                      </div>
+
+                      <div className="bg-amber-950/30 border border-amber-800 p-3 rounded">
+                        <h3 className="font-bold text-amber-400 mb-1 flex items-center gap-2"><Icon i="bullseye"/> PLANES 90D</h3>
+                        <p>Para crear hábitos reales. O sea, hacer la misma tortura repetitiva por 90 días seguidos. Estas tareas aparecerán todos los días en "Misión Hoy". Te mediremos la racha y te juzgaremos en silencio si la rompes.</p>
+                      </div>
+
+                      <div className="bg-blue-950/30 border border-blue-800 p-3 rounded">
+                        <h3 className="font-bold text-blue-400 mb-1 flex items-center gap-2"><Icon i="power-off"/> CERRAR CICLO (El Botón Mágico)</h3>
+                        <p>Pícalo cuando acabe tu día. Manda todo lo que lograste al Historial (para presumir) y regresa a la Bóveda las tareas que procrastinaste para que no te estorben mañana.</p>
+                      </div>
+                    </div>
+                    
+                    <button onClick={() => setShowHelp(false)} className="mt-6 w-full py-3 bg-amber-600 hover:bg-amber-500 text-slate-900 font-bold uppercase rounded transition-colors font-display">
+                      Entendido, ya no me distraigo
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {toastMessage && (
                   <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 bg-slate-900 border-2 border-fuchsia-500 rounded-lg p-4 shadow-[0_0_20px_rgba(217,70,239,0.4)] tdah-toast w-11/12 max-w-md">
@@ -451,7 +515,7 @@
                   <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl"></div>
                   <div className="absolute bottom-0 left-0 w-32 h-32 bg-fuchsia-500/10 rounded-full blur-3xl"></div>
 
-                  <div className="flex justify-between items-center relative z-10">
+                  <div className="flex justify-between items-center relative z-10 flex-wrap gap-2">
                     <div className="flex items-center gap-2">
                       <div className="p-1 rounded-lg shadow-[0_0_15px_rgba(217,70,239,0.5)] bg-slate-900 border border-fuchsia-600/50">
                         <img 
@@ -465,6 +529,15 @@
                       <h1 className="text-xl sm:text-2xl font-black tracking-widest font-display text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-400 via-emerald-400 to-amber-400 drop-shadow-md py-1">
                         TostiloKo OS 1.1
                       </h1>
+                      
+                      {/* BOTÓN DE INSTRUCCIONES ANIMADO */}
+                      <button 
+                        onClick={() => setShowHelp(true)} 
+                        className="ml-2 px-2 py-1 bg-amber-500/20 border border-amber-500 text-amber-400 text-xs font-tech font-bold rounded hover:bg-amber-500 hover:text-slate-900 transition-colors btn-help-wiggle"
+                        title="Manual para cerebros fritos"
+                      >
+                        <Icon i="circle-question" size={12} className="mr-1" /> ¿Cómo se usa esta cosa?
+                      </button>
                     </div>
                     
                     <div className="flex gap-2">
